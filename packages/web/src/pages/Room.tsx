@@ -293,6 +293,14 @@ export function Room({
   const fsBottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll both chat areas on new messages
+  const lockLandscape = () => {
+    try { (screen.orientation as any)?.lock('landscape').catch(() => undefined); } catch { /* not supported */ }
+  };
+
+  const unlockOrientation = () => {
+    try { screen.orientation?.unlock(); } catch { /* not supported */ }
+  };
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     fsBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -364,14 +372,6 @@ export function Room({
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const lockLandscape = () => {
-    try { (screen.orientation as any)?.lock('landscape').catch(() => undefined); } catch { /* not supported */ }
-  };
-
-  const unlockOrientation = () => {
-    try { screen.orientation?.unlock(); } catch { /* not supported */ }
-  };
-
   const enterFullscreen = () => {
     const el = videoShellRef.current;
     if (!el) return;
@@ -424,18 +424,21 @@ export function Room({
     if (!isFullscreen) return;
     const nowVisible = showFullscreenExit || showFullscreenChat;
     if (nowVisible) {
-      // hide immediately
+      // hide immediately, cancel timers
       if (fullscreenExitTimerRef.current) clearTimeout(fullscreenExitTimerRef.current);
       if (fullscreenChatTimerRef.current) clearTimeout(fullscreenChatTimerRef.current);
       setShowFullscreenExit(false);
       setShowFullscreenChat(false);
     } else {
-      revealFullscreenExit();
-      revealFullscreenChat();
+      // show without auto-hide timer — user must tap again to hide
+      if (fullscreenExitTimerRef.current) clearTimeout(fullscreenExitTimerRef.current);
+      if (fullscreenChatTimerRef.current) clearTimeout(fullscreenChatTimerRef.current);
+      setShowFullscreenExit(true);
+      setShowFullscreenChat(true);
     }
   };
 
-  // desktop: mouse move just reveals exit button (no toggle)
+  // desktop: mouse move reveals exit button with auto-hide (keep original behavior)
   const revealFullscreenChrome = () => {
     revealFullscreenExit();
     revealFullscreenChat();
@@ -533,6 +536,7 @@ export function Room({
           <button
             className={`fullscreen-exit btn-icon-dark${showFullscreenExit ? ' fullscreen-exit--visible' : ''}`}
             onClick={exitFullscreen}
+            onPointerDown={e => e.stopPropagation()}
             title="Exit fullscreen"
             aria-label="Exit fullscreen"
           >
