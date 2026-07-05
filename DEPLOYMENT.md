@@ -1,5 +1,10 @@
 # WatchTogether Deployment
 
+For focused setup guides, see:
+
+- [WEB_VERCEL.md](WEB_VERCEL.md)
+- [SERVER_DOCKER_COMPOSE.md](SERVER_DOCKER_COMPOSE.md)
+
 This repo has three deployable parts:
 
 - Server: Node.js signaling server, hosted on a home server with Docker Compose.

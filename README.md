@@ -1,6 +1,10 @@
 # WatchTogether
 
-Deployment guide: see [DEPLOYMENT.md](DEPLOYMENT.md) for Docker Compose server hosting, Vercel web deployment, and Windows desktop `.exe` build instructions.
+Deployment guides:
+
+- [WEB_VERCEL.md](WEB_VERCEL.md)
+- [SERVER_DOCKER_COMPOSE.md](SERVER_DOCKER_COMPOSE.md)
+- [DEPLOYMENT.md](DEPLOYMENT.md)
 
 Aplikasi screen sharing real-time untuk "nonton bareng". Tidak perlu akun, tidak ada database — buka, buat room, bagikan kode, selesai.
 
