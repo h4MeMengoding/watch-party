@@ -43,7 +43,7 @@ export default function App() {
 
   const signalReceivedRef = useRef<((fromId: string, sig: any) => void) | null>(null);
 
-  const { signal, destroyAll, streams } = usePeer(
+  const { signal, destroyAll, streams, peerStatus } = usePeer(
     (targetId, sig) => roomActions.signalPeer(targetId, sig),
     (_id, s) => setRemoteStream(s),
   );
@@ -95,6 +95,8 @@ export default function App() {
             messages={state.messages}
             myId={myId.current}
             remoteStream={activeStream}
+            peerStatus={peerStatus}
+            wsStatus={wsStatus}
             onLeave={handleLeave}
             onSendChat={sendChat}
           />

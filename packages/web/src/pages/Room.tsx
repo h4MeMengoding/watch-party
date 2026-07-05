@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppStatus } from '../hooks/useRoom';
+import type { PeerStatus } from '../hooks/usePeer';
 import type { ChatMessage, Participant } from '@watch-together/shared';
 
 interface Props {
@@ -9,11 +10,25 @@ interface Props {
   messages: ChatMessage[];
   myId: string | null;
   remoteStream: MediaStream | null;
+  peerStatus: PeerStatus;
+  wsStatus: string;
   onLeave: () => void;
   onSendChat: (text: string) => void;
 }
 
-function VideoPlayer({ stream }: { stream: MediaStream | null }) {
+interface PlaybackStatus {
+  label: string;
+  tone: 'idle' | 'pending' | 'ok' | 'error';
+  detail?: string;
+}
+
+function VideoPlayer({
+  stream,
+  onPlaybackStatus,
+}: {
+  stream: MediaStream | null;
+  onPlaybackStatus: (status: PlaybackStatus) => void;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   const [needsGesture, setNeedsGesture] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,10 +43,12 @@ function VideoPlayer({ stream }: { stream: MediaStream | null }) {
         .then(() => {
           setNeedsGesture(false);
           setIsPlaying(true);
+          onPlaybackStatus({ label: 'Playing media', tone: 'ok' });
         })
         .catch(() => {
           setNeedsGesture(true);
           setIsPlaying(false);
+          onPlaybackStatus({ label: 'Tap to play media', tone: 'pending', detail: 'Browser blocked autoplay or audio' });
         });
     }
   };
@@ -43,8 +60,31 @@ function VideoPlayer({ stream }: { stream: MediaStream | null }) {
     if (!video) return;
 
     video.srcObject = stream;
-    if (stream) requestAnimationFrame(play);
-  }, [stream]);
+    if (stream) {
+      const videoTracks = stream.getVideoTracks();
+      const audioTracks = stream.getAudioTracks();
+      onPlaybackStatus({
+        label: 'Stream attached',
+        tone: 'pending',
+        detail: `${videoTracks.length} video track, ${audioTracks.length} audio track`,
+      });
+      requestAnimationFrame(play);
+      const frameCheck = window.setTimeout(() => {
+        if (video.srcObject === stream && (video.videoWidth === 0 || video.readyState < 2)) {
+          setIsPlaying(false);
+          onPlaybackStatus({
+            label: 'No video frames yet',
+            tone: 'error',
+            detail: `readyState ${video.readyState}, size ${video.videoWidth}x${video.videoHeight}`,
+          });
+        }
+      }, 2500);
+
+      return () => clearTimeout(frameCheck);
+    } else {
+      onPlaybackStatus({ label: 'No media stream', tone: 'idle' });
+    }
+  }, [stream]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -57,20 +97,38 @@ function VideoPlayer({ stream }: { stream: MediaStream | null }) {
         onPlaying={() => {
           setNeedsGesture(false);
           setIsPlaying(true);
+          onPlaybackStatus({ label: 'Playing media', tone: 'ok' });
         }}
-        onWaiting={() => setIsPlaying(false)}
+        onLoadedMetadata={e => {
+          const video = e.currentTarget;
+          onPlaybackStatus({
+            label: 'Media metadata loaded',
+            tone: 'pending',
+            detail: `${video.videoWidth}x${video.videoHeight}`,
+          });
+        }}
+        onLoadedData={e => {
+          const video = e.currentTarget;
+          onPlaybackStatus({
+            label: 'Video frame loaded',
+            tone: 'ok',
+            detail: `${video.videoWidth}x${video.videoHeight}`,
+          });
+        }}
+        onWaiting={() => {
+          setIsPlaying(false);
+          onPlaybackStatus({ label: 'Buffering media', tone: 'pending' });
+        }}
+        onStalled={() => onPlaybackStatus({ label: 'Media stalled', tone: 'error' })}
+        onError={() => onPlaybackStatus({ label: 'Media playback error', tone: 'error' })}
       />
 
-      {stream && !isPlaying && (
+      {stream && needsGesture && !isPlaying && (
         <div className="stream-playback">
-          {needsGesture ? (
-            <button className="stream-playback__button" onClick={play}>
-              <IconPlay />
-              Play stream
-            </button>
-          ) : (
-            <div className="stream-playback__status">Connecting stream...</div>
-          )}
+          <button className="stream-playback__button" onClick={play}>
+            <IconPlay />
+            Play stream and audio
+          </button>
         </div>
       )}
     </>
@@ -204,13 +262,17 @@ const OVERLAY: Partial<Record<AppStatus, { icon: React.ReactNode; text: string; 
 };
 
 export function Room({
-  roomId, status, participants, messages, myId, remoteStream, onLeave, onSendChat,
+  roomId, status, participants, messages, myId, remoteStream, peerStatus, wsStatus, onLeave, onSendChat,
 }: Props) {
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFullscreenExit, setShowFullscreenExit] = useState(false);
   const [showFullscreenChat, setShowFullscreenChat] = useState(false);
+  const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>({
+    label: 'No media stream',
+    tone: 'idle',
+  });
   const videoShellRef = useRef<HTMLDivElement>(null);
   const fullscreenExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fullscreenChatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -311,9 +373,32 @@ export function Room({
 
   const overlay = OVERLAY[status] ?? OVERLAY.connected!;
   const fullscreenMessages = messages.slice(-4);
+  const videoTracks = remoteStream?.getVideoTracks() ?? [];
+  const audioTracks = remoteStream?.getAudioTracks() ?? [];
+  const activeVideoTracks = videoTracks.filter(track => track.readyState === 'live').length;
+  const activeAudioTracks = audioTracks.filter(track => track.readyState === 'live').length;
+  const connectionTone =
+    playbackStatus.tone === 'error' || peerStatus.tone === 'error'
+      ? 'error'
+      : playbackStatus.tone === 'ok'
+        ? 'ok'
+        : peerStatus.tone === 'ok'
+          ? 'pending'
+          : peerStatus.tone;
 
   return (
     <div className="room">
+      <div className={`room-status room-status--${connectionTone}`}>
+        <span className="room-status__dot" />
+        <span className="room-status__main">
+          {wsStatus === 'connected' ? playbackStatus.label : `WebSocket ${wsStatus}`}
+        </span>
+        <span className="room-status__meta">
+          {peerStatus.label}
+          {remoteStream && ` | ${activeVideoTracks}/${videoTracks.length} video, ${activeAudioTracks}/${audioTracks.length} audio`}
+        </span>
+      </div>
+
       <div
         ref={videoShellRef}
         className="room__video"
@@ -321,7 +406,7 @@ export function Room({
         onPointerDown={revealFullscreenChrome}
       >
         {remoteStream ? (
-          <VideoPlayer stream={remoteStream} />
+          <VideoPlayer stream={remoteStream} onPlaybackStatus={setPlaybackStatus} />
         ) : (
           <div className="room__overlay">
             <div className="room__overlay-icon">{overlay.icon}</div>
