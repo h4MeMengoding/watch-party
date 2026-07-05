@@ -420,6 +420,22 @@ export function Room({
     }, duration);
   };
 
+  const toggleFullscreenChrome = () => {
+    if (!isFullscreen) return;
+    const nowVisible = showFullscreenExit || showFullscreenChat;
+    if (nowVisible) {
+      // hide immediately
+      if (fullscreenExitTimerRef.current) clearTimeout(fullscreenExitTimerRef.current);
+      if (fullscreenChatTimerRef.current) clearTimeout(fullscreenChatTimerRef.current);
+      setShowFullscreenExit(false);
+      setShowFullscreenChat(false);
+    } else {
+      revealFullscreenExit();
+      revealFullscreenChat();
+    }
+  };
+
+  // desktop: mouse move just reveals exit button (no toggle)
   const revealFullscreenChrome = () => {
     revealFullscreenExit();
     revealFullscreenChat();
@@ -458,7 +474,7 @@ export function Room({
         ref={videoShellRef}
         className={`room__video${isCssFullscreen ? ' room__video--css-fullscreen' : ''}`}
         onPointerMove={revealFullscreenExit}
-        onPointerDown={revealFullscreenChrome}
+        onPointerDown={toggleFullscreenChrome}
       >
         {/* status bar — overlay on desktop, normal flow on mobile via CSS */}
         {connectionTone !== 'ok' && (
