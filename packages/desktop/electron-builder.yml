@@ -1,0 +1,28 @@
+appId: com.watchtogether.app
+productName: WatchTogether
+directories:
+  output: dist/package
+files:
+  - dist/renderer/**/*
+  - electron/**/*.cjs
+  - node_modules/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/icon.ico
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: assets/icon.icns
+  category: public.app-category.utilities
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: assets/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -1,0 +1,18 @@
+services:
+  watch-together-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: watch-together-server:latest
+    container_name: watch-together-server
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

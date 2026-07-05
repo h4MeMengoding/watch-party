@@ -1,0 +1,36 @@
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/server/package.json packages/server/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY packages/shared packages/shared
+COPY packages/server packages/server
+
+RUN pnpm --filter @watch-together/shared build \
+  && pnpm --filter @watch-together/server build \
+  && pnpm prune --prod
+
+FROM node:20-alpine AS runtime
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages/shared ./packages/shared
+COPY --from=build /app/packages/server/package.json ./packages/server/package.json
+COPY --from=build /app/packages/server/dist ./packages/server/dist
+COPY --from=build /app/packages/server/node_modules ./packages/server/node_modules
+
+EXPOSE 3001
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3001/health || exit 1
+
+CMD ["node", "packages/server/dist/index.js"]

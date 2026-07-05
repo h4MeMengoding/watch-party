@@ -1,0 +1,16 @@
+{
+  "name": "watch-party",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "concurrently -k -n shared,server,web,desktop -c blue,green,cyan,yellow \"pnpm --filter @watch-together/shared dev\" \"pnpm --filter @watch-together/server dev\" \"pnpm --filter @watch-together/web dev\" \"pnpm --filter @watch-together/desktop dev\"",
+    "build": "pnpm -r build",
+    "build:desktop:exe": "pnpm --filter @watch-together/desktop build && node scripts/collect-desktop-build.mjs",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
