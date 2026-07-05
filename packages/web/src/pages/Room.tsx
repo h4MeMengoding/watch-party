@@ -290,15 +290,22 @@ export function Room({
   const fullscreenChatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFullscreenMessageIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fsBottomRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll both chat areas on new messages
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    fsBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   useEffect(() => {
     const syncFullscreenState = () => {
       const active = document.fullscreenElement === videoShellRef.current;
-      // Only update if native fullscreen; CSS fullscreen managed separately
       if (!active) {
         setIsFullscreen(false);
         setShowFullscreenExit(false);
         setShowFullscreenChat(false);
+        unlockOrientation();
       } else {
         setIsFullscreen(true);
       }
@@ -349,7 +356,6 @@ export function Room({
     if (!t) return;
     onSendChat(t);
     setText('');
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   };
 
   const copyCode = () => {
@@ -358,23 +364,34 @@ export function Room({
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const lockLandscape = () => {
+    try { (screen.orientation as any)?.lock('landscape').catch(() => undefined); } catch { /* not supported */ }
+  };
+
+  const unlockOrientation = () => {
+    try { screen.orientation?.unlock(); } catch { /* not supported */ }
+  };
+
   const enterFullscreen = () => {
     const el = videoShellRef.current;
     if (!el) return;
     if (el.requestFullscreen) {
       el.requestFullscreen()
-        .then(() => setIsFullscreen(true))
+        .then(() => { setIsFullscreen(true); lockLandscape(); })
         .catch(() => {
           setIsCssFullscreen(true);
           setIsFullscreen(true);
+          lockLandscape();
         });
     } else {
       setIsCssFullscreen(true);
       setIsFullscreen(true);
+      lockLandscape();
     }
   };
 
   const exitFullscreen = () => {
+    unlockOrientation();
     if (isCssFullscreen) {
       setIsCssFullscreen(false);
       setIsFullscreen(false);
@@ -421,7 +438,7 @@ export function Room({
   };
 
   const overlay = OVERLAY[status] ?? OVERLAY.connected!;
-  const fullscreenMessages = messages.slice(-4);
+  const fullscreenMessages = messages;
   const videoTracks = remoteStream?.getVideoTracks() ?? [];
   const audioTracks = remoteStream?.getAudioTracks() ?? [];
   const activeVideoTracks = videoTracks.filter(track => track.readyState === 'live').length;
@@ -437,23 +454,25 @@ export function Room({
 
   return (
     <div className="room">
-      <div className={`room-status room-status--${connectionTone}`}>
-        <span className="room-status__dot" />
-        <span className="room-status__main">
-          {wsStatus === 'connected' ? playbackStatus.label : `WebSocket ${wsStatus}`}
-        </span>
-        <span className="room-status__meta">
-          {peerStatus.label}
-          {remoteStream && ` | ${activeVideoTracks}/${videoTracks.length} video, ${activeAudioTracks}/${audioTracks.length} audio`}
-        </span>
-      </div>
-
       <div
         ref={videoShellRef}
         className={`room__video${isCssFullscreen ? ' room__video--css-fullscreen' : ''}`}
         onPointerMove={revealFullscreenExit}
         onPointerDown={revealFullscreenChrome}
       >
+        {/* status bar — overlay on desktop, normal flow on mobile via CSS */}
+        {connectionTone !== 'ok' && (
+          <div className={`room-status room-status--${connectionTone}`}>
+            <span className="room-status__dot" />
+            <span className="room-status__main">
+              {wsStatus === 'connected' ? playbackStatus.label : `WebSocket ${wsStatus}`}
+            </span>
+            <span className="room-status__meta">
+              {peerStatus.label}
+              {remoteStream && ` | ${activeVideoTracks}/${videoTracks.length} video, ${activeAudioTracks}/${audioTracks.length} audio`}
+            </span>
+          </div>
+        )}
         {remoteStream ? (
           <VideoPlayer stream={remoteStream} onPlaybackStatus={setPlaybackStatus} />
         ) : (
@@ -529,6 +548,7 @@ export function Room({
                   <span className="fullscreen-chat__text">No messages yet</span>
                 </div>
               )}
+              <div ref={fsBottomRef} />
             </div>
             <div className="fullscreen-chat__reply">
               <input
