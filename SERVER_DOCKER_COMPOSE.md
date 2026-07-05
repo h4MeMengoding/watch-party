@@ -11,6 +11,13 @@ Use this guide to run the WatchTogether signaling server on a home server.
 
 The server listens on container port `3001`.
 
+The Docker image intentionally builds only:
+
+- `packages/server`
+- `packages/shared`
+
+It does not install or build the web app, desktop app, Electron, Vite, or workspace-wide dependencies.
+
 ## Quick Start
 
 From the repository root:
@@ -18,6 +25,13 @@ From the repository root:
 ```bash
 cp .env.server.example .env
 docker compose up -d --build
+```
+
+If you previously built the older image, rebuild without cache once:
+
+```bash
+docker compose build --no-cache
+docker compose up -d
 ```
 
 Check logs:
