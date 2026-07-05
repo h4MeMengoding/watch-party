@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Resolution } from '@watch-together/shared';
+import { RESOLUTION_CONSTRAINTS, type Resolution } from '@watch-together/shared';
 
 interface Source {
   id: string;
@@ -17,6 +17,33 @@ interface Props {
 }
 
 const RESOLUTIONS: Resolution[] = ['720p', '1080p', '1440p', 'original'];
+
+async function applyCaptureProfile(stream: MediaStream, resolution: Resolution) {
+  const video = stream.getVideoTracks()[0];
+  if (!video) return stream;
+
+  if ('contentHint' in video) {
+    video.contentHint = 'detail';
+  }
+
+  const profile = RESOLUTION_CONSTRAINTS[resolution];
+  const constraints: MediaTrackConstraints = {
+    frameRate: { ideal: 30, max: 30 },
+  };
+
+  if (resolution !== 'original') {
+    constraints.width = { ideal: profile.width, max: profile.width };
+    constraints.height = { ideal: profile.height, max: profile.height };
+  }
+
+  try {
+    await video.applyConstraints(constraints);
+  } catch (error) {
+    console.warn('[capture] failed to apply profile', resolution, error);
+  }
+
+  return stream;
+}
 
 declare global {
   interface Window {
@@ -71,7 +98,7 @@ export function ShareControls({ isSharing, onStart, onStop, resolution, onResolu
     if (!window.electronAPI) {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        onStart(stream);
+        onStart(await applyCaptureProfile(stream, resolution));
       } catch { /* cancelled */ }
       return;
     }
@@ -100,7 +127,7 @@ export function ShareControls({ isSharing, onStart, onStop, resolution, onResolu
       await new Promise(r => setTimeout(r, 80));
       window.electronAPI?.selectSource(id);
       const stream = await streamPromise;
-      onStart(stream);
+      onStart(await applyCaptureProfile(stream, resolution));
     } catch (err: any) {
       const msg = err?.message ?? String(err);
       if (!msg.includes('cancelled') && !msg.includes('denied')) {

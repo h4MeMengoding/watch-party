@@ -41,6 +41,8 @@ export function usePeer(
   onStream?: (peerId: string, stream: MediaStream) => void,
 ) {
   const peers = useRef<Map<string, InstanceType<typeof Peer>>>(new Map());
+  const pendingSignals = useRef<Map<string, unknown[]>>(new Map());
+  const creatingPeer = useRef<Map<string, Promise<InstanceType<typeof Peer>>>>(new Map());
   const [streams, setStreams] = useState<Map<string, MediaStream>>(new Map());
   const [peerStatus, setPeerStatus] = useState<PeerStatus>({
     label: 'Waiting for peer',
@@ -112,12 +114,36 @@ export function usePeer(
     }
 
     peers.current.set(peerId, peer);
+
+    // Flush any signals that arrived while peer was being created
+    const queued = pendingSignals.current.get(peerId) ?? [];
+    pendingSignals.current.delete(peerId);
+    creatingPeer.current.delete(peerId);
+    for (const s of queued) peer.signal(s);
+
     return peer;
   }, [onSignal, onStream]);
 
   const signal = useCallback(async (peerId: string, data: unknown) => {
-    if (!peers.current.has(peerId)) await createPeer(peerId, false);
-    peers.current.get(peerId)?.signal(data);
+    // If peer exists and ready, signal immediately
+    if (peers.current.has(peerId)) {
+      peers.current.get(peerId)?.signal(data);
+      return;
+    }
+    // If peer is being created, queue the signal
+    if (creatingPeer.current.has(peerId)) {
+      const q = pendingSignals.current.get(peerId) ?? [];
+      q.push(data);
+      pendingSignals.current.set(peerId, q);
+      await creatingPeer.current.get(peerId);
+      return;
+    }
+    // First signal for this peer — create it, then flush will handle this signal + any queued
+    const q: unknown[] = [data];
+    pendingSignals.current.set(peerId, q);
+    const promise = createPeer(peerId, false);
+    creatingPeer.current.set(peerId, promise);
+    await promise;
   }, [createPeer]);
 
   const addStream = useCallback((stream: MediaStream) => {

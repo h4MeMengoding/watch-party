@@ -78,7 +78,7 @@ function VideoPlayer({
             detail: `readyState ${video.readyState}, size ${video.videoWidth}x${video.videoHeight}`,
           });
         }
-      }, 2500);
+      }, 8000);
 
       return () => clearTimeout(frameCheck);
     } else {
@@ -238,6 +238,16 @@ function IconCrown({ size = 10 }: { size?: number }) {
   );
 }
 
+function IconUsers({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M1 13.5c0-2.485 2.239-4.5 5-4.5s5 2.015 5 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M11 7c1.105 0 2 .895 2 2M13 13.5c0-1.38-.672-2.607-1.714-3.386" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function IconSend({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -267,8 +277,10 @@ export function Room({
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCssFullscreen, setIsCssFullscreen] = useState(false);
   const [showFullscreenExit, setShowFullscreenExit] = useState(false);
   const [showFullscreenChat, setShowFullscreenChat] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
   const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>({
     label: 'No media stream',
     tone: 'idle',
@@ -282,9 +294,14 @@ export function Room({
   useEffect(() => {
     const syncFullscreenState = () => {
       const active = document.fullscreenElement === videoShellRef.current;
-      setIsFullscreen(active);
-      setShowFullscreenExit(false);
-      setShowFullscreenChat(false);
+      // Only update if native fullscreen; CSS fullscreen managed separately
+      if (!active) {
+        setIsFullscreen(false);
+        setShowFullscreenExit(false);
+        setShowFullscreenChat(false);
+      } else {
+        setIsFullscreen(true);
+      }
     };
     document.addEventListener('fullscreenchange', syncFullscreenState);
     return () => {
@@ -293,6 +310,19 @@ export function Room({
       if (fullscreenChatTimerRef.current) clearTimeout(fullscreenChatTimerRef.current);
     };
   }, []);
+
+  // Close participants popover on outside click
+  useEffect(() => {
+    if (!showParticipants) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (!target.closest('.participants-btn') && !target.closest('.participants-popover')) {
+        setShowParticipants(false);
+      }
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [showParticipants]);
 
   useEffect(() => {
     const latest = messages[messages.length - 1];
@@ -329,10 +359,29 @@ export function Room({
   };
 
   const enterFullscreen = () => {
-    videoShellRef.current?.requestFullscreen().catch(() => undefined);
+    const el = videoShellRef.current;
+    if (!el) return;
+    if (el.requestFullscreen) {
+      el.requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => {
+          setIsCssFullscreen(true);
+          setIsFullscreen(true);
+        });
+    } else {
+      setIsCssFullscreen(true);
+      setIsFullscreen(true);
+    }
   };
 
   const exitFullscreen = () => {
+    if (isCssFullscreen) {
+      setIsCssFullscreen(false);
+      setIsFullscreen(false);
+      setShowFullscreenExit(false);
+      setShowFullscreenChat(false);
+      return;
+    }
     if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
   };
 
@@ -401,7 +450,7 @@ export function Room({
 
       <div
         ref={videoShellRef}
-        className="room__video"
+        className={`room__video${isCssFullscreen ? ' room__video--css-fullscreen' : ''}`}
         onPointerMove={revealFullscreenExit}
         onPointerDown={revealFullscreenChrome}
       >
@@ -502,36 +551,47 @@ export function Room({
 
       <div className="sidebar">
         <div className="sidebar__head">
-          <span className="sidebar__head-label">Participants</span>
-          <span className="sidebar__head-count">{participants.length} / 4</span>
-        </div>
-
-        <div className="participant-list">
-          {participants.map(p => (
-            <div key={p.id} className="participant-row">
-              <div className={`participant-avatar${p.isHost ? ' participant-avatar--host' : ''}`}>
-                {initials(p.name)}
+          <span className="sidebar__head-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconMessageSquare />
+            Chat
+          </span>
+          <div style={{ position: 'relative' }}>
+            <button
+              className="participants-btn"
+              onClick={() => setShowParticipants(p => !p)}
+              title="Participants"
+              aria-label={`Participants (${participants.length})`}
+            >
+              <IconUsers />
+              <span className="participants-btn__count">{participants.length}</span>
+            </button>
+            {showParticipants && (
+              <div className="participants-popover">
+                <div className="participants-popover__head">
+                  Participants <span className="participants-popover__count">{participants.length} / 4</span>
+                </div>
+                <div className="participant-list">
+                  {participants.map(p => (
+                    <div key={p.id} className="participant-row">
+                      <div className={`participant-avatar${p.isHost ? ' participant-avatar--host' : ''}`}>
+                        {initials(p.name)}
+                      </div>
+                      <span className="participant-name">{p.name}</span>
+                      {p.isHost && (
+                        <span className="participant-badge" title="Host">
+                          <IconCrown /> Host
+                        </span>
+                      )}
+                      {p.id === myId && <span className="participant-you">you</span>}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <span className="participant-name">{p.name}</span>
-              {p.isHost && (
-                <span className="participant-badge" title="Host">
-                  <IconCrown /> Host
-                </span>
-              )}
-              {p.id === myId && <span className="participant-you">you</span>}
-            </div>
-          ))}
+            )}
+          </div>
         </div>
 
         <div className="chat">
-          <div className="sidebar__head">
-            <span className="sidebar__head-label">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IconMessageSquare />
-                Chat
-              </span>
-            </span>
-          </div>
 
           <div className="chat__messages">
             {messages.length === 0 && <p className="chat__empty">No messages yet</p>}
