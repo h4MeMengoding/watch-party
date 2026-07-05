@@ -80,6 +80,17 @@ export function usePeer(
         tone: 'ok',
         detail: `${videoTracks} video track, ${audioTracks} audio track`,
       });
+
+      // Disable all voice-processing on received audio tracks (sounds like phone otherwise)
+      s.getAudioTracks().forEach(track => {
+        track.applyConstraints({
+          // @ts-ignore — browser-specific but widely supported
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        }).catch(() => undefined);
+      });
+
       setStreams(prev => new Map(prev).set(peerId, s));
       onStream?.(peerId, s);
     });

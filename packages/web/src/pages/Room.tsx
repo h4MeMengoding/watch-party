@@ -32,6 +32,8 @@ function VideoPlayer({
   const ref = useRef<HTMLVideoElement>(null);
   const [needsGesture, setNeedsGesture] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   const play = () => {
     const video = ref.current;
@@ -44,6 +46,8 @@ function VideoPlayer({
           setNeedsGesture(false);
           setIsPlaying(true);
           onPlaybackStatus({ label: 'Playing media', tone: 'ok' });
+          // Resume AudioContext if suspended (autoplay policy)
+          audioCtxRef.current?.resume().catch(() => undefined);
         })
         .catch(() => {
           setNeedsGesture(true);
@@ -57,31 +61,68 @@ function VideoPlayer({
     const video = ref.current;
     setNeedsGesture(false);
     setIsPlaying(false);
+
+    // Cleanup previous AudioContext
+    sourceNodeRef.current?.disconnect();
+    audioCtxRef.current?.close().catch(() => undefined);
+    audioCtxRef.current = null;
+    sourceNodeRef.current = null;
+
     if (!video) return;
 
-    video.srcObject = stream;
     if (stream) {
-      const videoTracks = stream.getVideoTracks();
       const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
       onPlaybackStatus({
         label: 'Stream attached',
         tone: 'pending',
         detail: `${videoTracks.length} video track, ${audioTracks.length} audio track`,
       });
+
+      if (audioTracks.length > 0) {
+        // Route audio through AudioContext to bypass browser voice processing
+        // (echoCancellation / noiseSuppression / autoGainControl cause "phone call" sound on mobile)
+        const videoOnly = new MediaStream(videoTracks);
+        video.srcObject = videoOnly;
+        video.muted = false;
+
+        try {
+          const ctx = new AudioContext();
+          const source = ctx.createMediaStreamSource(stream);
+          source.connect(ctx.destination);
+          audioCtxRef.current = ctx;
+          sourceNodeRef.current = source;
+        } catch {
+          // AudioContext failed — fall back to direct srcObject with muted=false
+          video.srcObject = stream;
+        }
+      } else {
+        video.srcObject = stream;
+      }
+
       requestAnimationFrame(play);
       const frameCheck = window.setTimeout(() => {
-        if (video.srcObject === stream && (video.videoWidth === 0 || video.readyState < 2)) {
-          setIsPlaying(false);
-          onPlaybackStatus({
-            label: 'No video frames yet',
-            tone: 'error',
-            detail: `readyState ${video.readyState}, size ${video.videoWidth}x${video.videoHeight}`,
-          });
+        if (video.srcObject === stream || (video.srcObject instanceof MediaStream && video.srcObject !== stream)) {
+          if (video.videoWidth === 0 || video.readyState < 2) {
+            setIsPlaying(false);
+            onPlaybackStatus({
+              label: 'No video frames yet',
+              tone: 'error',
+              detail: `readyState ${video.readyState}, size ${video.videoWidth}x${video.videoHeight}`,
+            });
+          }
         }
       }, 8000);
 
-      return () => clearTimeout(frameCheck);
+      return () => {
+        clearTimeout(frameCheck);
+        sourceNodeRef.current?.disconnect();
+        audioCtxRef.current?.close().catch(() => undefined);
+        audioCtxRef.current = null;
+        sourceNodeRef.current = null;
+      };
     } else {
+      video.srcObject = null;
       onPlaybackStatus({ label: 'No media stream', tone: 'idle' });
     }
   }, [stream]); // eslint-disable-line react-hooks/exhaustive-deps
