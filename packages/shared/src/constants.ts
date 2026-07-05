@@ -17,8 +17,3 @@ export function generateRoomCode(): string {
   const n = Math.floor(Math.random() * 100).toString().padStart(2, '0');
   return n + n;
 }
-
-export const STUN_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-];

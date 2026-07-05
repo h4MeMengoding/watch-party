@@ -1,44 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Peer from 'simple-peer-light';
-import { STUN_SERVERS } from '@watch-together/shared';
+import { WS_PORT } from '@watch-together/shared';
 
-const CF_API_TOKEN = import.meta.env.VITE_CF_API_TOKEN as string | undefined;
-const CF_TURN_KEY_ID = import.meta.env.VITE_CF_TURN_KEY_ID as string | undefined;
+const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://localhost:${WS_PORT}`;
+const TURN_CREDENTIALS_URL = import.meta.env.VITE_TURN_CREDENTIALS_URL as string | undefined;
 
 let cachedIce: RTCIceServer[] | null = null;
 let cacheExpiry = 0;
 
+function getTurnCredentialsUrl() {
+  if (TURN_CREDENTIALS_URL) return TURN_CREDENTIALS_URL;
+  const url = new URL(WS_URL.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:'));
+  return `${url.origin}/turn-credentials`;
+}
+
 async function getIceServers(): Promise<RTCIceServer[]> {
-  const stun = STUN_SERVERS as RTCIceServer[];
-  if (!CF_API_TOKEN || !CF_TURN_KEY_ID) return stun;
   if (cachedIce && Date.now() < cacheExpiry) return cachedIce;
 
-  try {
-    const res = await fetch(
-      `https://rtc.live.cloudflare.com/v1/turn/keys/${CF_TURN_KEY_ID}/credentials/generate`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${CF_API_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ttl: 86400 }),
-      },
-    );
-    if (!res.ok) throw new Error(`CF TURN ${res.status}`);
-    const data = await res.json() as { iceServers: { urls: string[]; username: string; credential: string } };
-    const turnServers: RTCIceServer[] = [{
-      urls: data.iceServers.urls,
-      username: data.iceServers.username,
-      credential: data.iceServers.credential,
-    }];
-    cachedIce = [...stun, ...turnServers];
-    cacheExpiry = Date.now() + 23 * 60 * 60 * 1000;
-    return cachedIce;
-  } catch (err) {
-    console.warn('[TURN] fallback to STUN only:', err);
-    return stun;
+  const res = await fetch(getTurnCredentialsUrl(), { cache: 'no-store' });
+  if (!res.ok) throw new Error(`TURN credentials ${res.status}`);
+
+  const data = await res.json() as { iceServers: RTCIceServer[] };
+  if (!Array.isArray(data.iceServers) || data.iceServers.length === 0) {
+    throw new Error('TURN credentials response is empty');
   }
+
+  cachedIce = data.iceServers;
+  cacheExpiry = Date.now() + 23 * 60 * 60 * 1000;
+  return cachedIce;
 }
 
 export function usePeer(
@@ -54,7 +43,15 @@ export function usePeer(
     localStream?: MediaStream,
   ) => {
     const iceServers = await getIceServers();
-    const peer = new Peer({ initiator, stream: localStream, trickle: true, config: { iceServers } });
+    const peer = new Peer({
+      initiator,
+      stream: localStream,
+      trickle: true,
+      config: {
+        iceServers,
+        iceTransportPolicy: 'relay',
+      },
+    });
 
     peer.on('signal', (data: unknown) => onSignal(peerId, data));
     peer.on('stream', (s: MediaStream) => {

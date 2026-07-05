@@ -52,13 +52,29 @@ Expected response:
 {"status":"ok","timestamp":1234567890}
 ```
 
+Check TURN credentials:
+
+```bash
+curl http://localhost:3001/turn-credentials
+```
+
+Expected shape:
+
+```json
+{"iceServers":[{"urls":["turn:..."],"username":"...","credential":"..."}]}
+```
+
 ## Configuration
 
 The host port is configured in `.env`:
 
 ```env
 SERVER_PORT=3001
+CF_API_TOKEN=your_cloudflare_api_token
+CF_TURN_KEY_ID=your_cloudflare_turn_key_id
 ```
+
+`CF_API_TOKEN` and `CF_TURN_KEY_ID` are required. The server generates short-lived Cloudflare TURN credentials at `/turn-credentials`; web and desktop clients never receive the Cloudflare API token itself.
 
 To use another host port:
 
@@ -124,6 +140,8 @@ docker compose down
 ## Troubleshooting
 
 - If `/health` fails, run `docker compose logs -f`.
+- If `/turn-credentials` returns `503`, add `CF_API_TOKEN` and `CF_TURN_KEY_ID` to `.env`.
+- If `/turn-credentials` returns `502`, check the Cloudflare token permissions and TURN key ID.
 - If clients reconnect forever, confirm the public `VITE_WS_URL` points to this server.
 - If the Vercel app is HTTPS, the WebSocket URL must be `wss://`, not `ws://`.
-- If users outside your network cannot connect, check router port forwarding, firewall rules, and reverse proxy WebSocket upgrade settings.
+- If video does not connect, check that the public `/turn-credentials` endpoint is reachable from the browser.

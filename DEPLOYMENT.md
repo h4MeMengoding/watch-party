@@ -21,6 +21,7 @@ The server exposes HTTP health checks and WebSocket signaling on port `3001`.
 - Docker Compose plugin
 - A reachable domain or public IP for your home server
 - Port forwarding or a reverse proxy to the container
+- Cloudflare Calls TURN API token and TURN key ID
 
 ### Quick Start
 
@@ -29,6 +30,14 @@ Copy the repo to your home server, then run:
 ```bash
 cp .env.server.example .env
 docker compose up -d --build
+```
+
+Fill `.env` before starting:
+
+```env
+SERVER_PORT=3001
+CF_API_TOKEN=your_cloudflare_api_token
+CF_TURN_KEY_ID=your_cloudflare_turn_key_id
 ```
 
 Check health:
@@ -41,6 +50,12 @@ Expected response:
 
 ```json
 {"status":"ok","timestamp":1234567890}
+```
+
+Check TURN:
+
+```bash
+curl http://localhost:3001/turn-credentials
 ```
 
 ### Ports
@@ -101,6 +116,12 @@ Set this in Vercel:
 VITE_WS_URL=wss://watch-server.example.com
 ```
 
+Optional, only if the HTTP TURN endpoint has a different URL:
+
+```env
+VITE_TURN_CREDENTIALS_URL=https://watch-server.example.com/turn-credentials
+```
+
 If your reverse proxy routes WebSocket traffic under `/ws`, use:
 
 ```env
@@ -108,6 +129,8 @@ VITE_WS_URL=wss://watch-server.example.com/ws
 ```
 
 Redeploy the web app after changing `VITE_WS_URL`.
+
+Do not put `CF_API_TOKEN` or `CF_TURN_KEY_ID` in Vercel. Those secrets belong only in the server `.env`.
 
 ## 3. Desktop Windows EXE
 
@@ -123,6 +146,12 @@ Example:
 
 ```env
 VITE_WS_URL=wss://watch-server.example.com
+```
+
+Optional:
+
+```env
+VITE_TURN_CREDENTIALS_URL=https://watch-server.example.com/turn-credentials
 ```
 
 Build the Windows installer and collect the result into the root `build` folder:
@@ -175,4 +204,5 @@ pnpm -r build
 - Web and desktop clients must point to the same deployed signaling server through `VITE_WS_URL`.
 - Use `wss://` for deployed web clients on HTTPS pages.
 - Screen sharing relies on browser/Electron capture permissions.
-- Peer media still uses public STUN servers from `packages/shared/src/constants.ts`.
+- Peer media is forced through Cloudflare TURN with `iceTransportPolicy: "relay"`, including clients on the same network.
+- If the TURN credentials endpoint fails, video will not connect by design.

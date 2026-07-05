@@ -79,10 +79,10 @@ Aplikasi screen sharing real-time untuk "nonton bareng". Tidak perlu akun, tidak
 ```
 
 **Prinsip utama:**
-- Server **hanya relay sinyal** — tidak ada media yang lewat server
-- WebRTC peer-to-peer langsung host ↔ setiap viewer
+- Server **hanya relay sinyal** — media tidak lewat server aplikasi
+- WebRTC media dipaksa lewat Cloudflare TURN host ↔ setiap viewer
 - Semua state **in-memory** di server — hilang saat server restart
-- STUN default (Google), TURN via Cloudflare sebagai fallback NAT traversal
+- Cloudflare TURN wajib dipakai untuk semua koneksi, termasuk saat satu jaringan
 
 ---
 
@@ -100,7 +100,7 @@ watch-party/
     ├── shared/                  # tipe & konstanta bersama
     │   ├── src/
     │   │   ├── types.ts         # Participant, ChatMessage, ClientEvent, ServerEvent
-    │   │   ├── constants.ts     # MAX_PARTICIPANTS, generateRoomCode, STUN_SERVERS
+    │   │   ├── constants.ts     # MAX_PARTICIPANTS, generateRoomCode
     │   │   └── index.ts
     │   ├── package.json
     │   └── tsconfig.json
@@ -139,7 +139,7 @@ watch-party/
     │   ├── tsconfig.json
     │   ├── tsconfig.electron.json
     │   ├── electron-builder.yml
-    │   ├── .env                 # VITE_WS_URL, CF TURN creds
+    │   ├── .env                 # VITE_WS_URL, optional VITE_TURN_CREDENTIALS_URL
     │   └── package.json
     │
     └── web/                     # Web viewer (mobile-first)
@@ -206,15 +206,21 @@ Salin dan isi `.env` untuk masing-masing package:
 # URL WebSocket server (development: localhost, production: server kamu)
 VITE_WS_URL=ws://localhost:3001
 
-# Cloudflare TURN — diperlukan untuk koneksi cross-NAT (misal hotspot vs WiFi berbeda)
-# Dapatkan API Token + TURN Key ID di: https://dash.cloudflare.com/ → Calls → TURN
-VITE_CF_API_TOKEN=your_cloudflare_api_token
-VITE_CF_TURN_KEY_ID=your_turn_key_id
+# Optional. Default: origin VITE_WS_URL + /turn-credentials
+VITE_TURN_CREDENTIALS_URL=http://localhost:3001/turn-credentials
 ```
 
-Credentials TURN (username + credential) di-generate **otomatis saat runtime** via Cloudflare REST API — tidak perlu diisi manual. App akan fetch ke `https://rtc.live.cloudflare.com/v1/turn/keys/{KEY_ID}/credentials/generate` setiap 23 jam.
+**Server `.env`:**
 
-> **Tanpa TURN:** WebRTC tetap bekerja jika host dan viewer di jaringan yang sama atau punya IP publik. TURN diperlukan untuk koneksi cross-NAT (mobile data, korporat, NAT ketat).
+```env
+SERVER_PORT=3001
+CF_API_TOKEN=your_cloudflare_api_token
+CF_TURN_KEY_ID=your_turn_key_id
+```
+
+Credentials TURN (username + credential) di-generate **otomatis oleh server** via Cloudflare REST API. Web dan desktop hanya fetch ke endpoint server `/turn-credentials`, sehingga Cloudflare API token tidak pernah masuk bundle client.
+
+> **TURN-only:** WebRTC memakai `iceTransportPolicy: "relay"`. Jika endpoint `/turn-credentials` gagal, video tidak akan connect, termasuk saat host dan viewer berada di jaringan yang sama.
 
 ### Port Default
 
@@ -386,7 +392,7 @@ Host                    Server                  Viewer
  │── signal (ICE) ────────▶│                       │
  │                        │──── signal (ICE) ─────▶│
  │                        │                       │
- │◀══════════ WebRTC P2P stream (langsung) ════════│
+ │◀══════════ WebRTC media via Cloudflare TURN ═════│
  │                        │                       │
  │── chat ────────────────▶│                       │
  │                        │──── chat ─────────────▶│
@@ -529,8 +535,8 @@ Atau tambahkan ke `packages/desktop/package.json`:
 
 **Gejala:** Stream tidak muncul di viewer, status stuck di "Waiting".
 **Kemungkinan penyebab:**
-1. **NAT ketat** → Isi Cloudflare TURN credentials di `.env`
-2. **Firewall blokir UDP** → Cloudflare TURN support TCP: `turns:turn.cloudflare.com:3478?transport=tcp`
+1. **TURN belum dikonfigurasi** → Isi `CF_API_TOKEN` dan `CF_TURN_KEY_ID` di server `.env`
+2. **Endpoint TURN gagal** → Cek `curl http://localhost:3001/turn-credentials`
 3. **Server tidak berjalan** → Cek `curl http://localhost:3001/health`
 
 ### Audio tidak ter-capture (macOS/Linux)

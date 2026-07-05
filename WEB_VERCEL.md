@@ -30,6 +30,12 @@ Set this variable in Vercel:
 VITE_WS_URL=wss://your-server-domain.example.com
 ```
 
+Optional, only if your TURN credentials endpoint is not at `/turn-credentials` on the same domain:
+
+```env
+VITE_TURN_CREDENTIALS_URL=https://your-server-domain.example.com/turn-credentials
+```
+
 If your reverse proxy exposes the WebSocket server under a path:
 
 ```env
@@ -37,6 +43,8 @@ VITE_WS_URL=wss://your-server-domain.example.com/ws
 ```
 
 Use `wss://` for production because Vercel serves the web app over HTTPS.
+
+Do not set `CF_API_TOKEN` or `CF_TURN_KEY_ID` in Vercel. Those are server-only secrets.
 
 ## Deploy
 
@@ -53,4 +61,5 @@ pnpm --filter @watch-together/web build
 
 - If the app says `Offline` or `Reconnecting`, check `VITE_WS_URL`.
 - If the browser blocks the connection, make sure the server URL uses `wss://`.
+- If video does not appear, check that `https://your-server-domain.example.com/turn-credentials` returns TURN `iceServers`.
 - If Vercel cannot resolve workspace packages, confirm the root install command starts with `cd ../..`.
