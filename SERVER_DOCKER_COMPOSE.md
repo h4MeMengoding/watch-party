@@ -72,9 +72,12 @@ The host port is configured in `.env`:
 SERVER_PORT=3001
 CF_API_TOKEN=your_cloudflare_api_token
 CF_TURN_KEY_ID=your_cloudflare_turn_key_id
+TURN_TRANSPORT=tcp
 ```
 
 `CF_API_TOKEN` and `CF_TURN_KEY_ID` are required. The server generates short-lived Cloudflare TURN credentials at `/turn-credentials`; web and desktop clients never receive the Cloudflare API token itself.
+
+`TURN_TRANSPORT=tcp` is the default and is recommended for mobile networks. Use `TURN_TRANSPORT=all` only when you want to allow UDP too.
 
 To use another host port:
 

@@ -12,6 +12,7 @@ services:
       NODE_ENV: production
       CF_API_TOKEN: "${CF_API_TOKEN:?set CF_API_TOKEN in .env}"
       CF_TURN_KEY_ID: "${CF_TURN_KEY_ID:?set CF_TURN_KEY_ID in .env}"
+      TURN_TRANSPORT: "${TURN_TRANSPORT:-tcp}"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
       interval: 30s

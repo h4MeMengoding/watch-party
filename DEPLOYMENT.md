@@ -38,6 +38,7 @@ Fill `.env` before starting:
 SERVER_PORT=3001
 CF_API_TOKEN=your_cloudflare_api_token
 CF_TURN_KEY_ID=your_cloudflare_turn_key_id
+TURN_TRANSPORT=tcp
 ```
 
 Check health:

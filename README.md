@@ -216,11 +216,13 @@ VITE_TURN_CREDENTIALS_URL=http://localhost:3001/turn-credentials
 SERVER_PORT=3001
 CF_API_TOKEN=your_cloudflare_api_token
 CF_TURN_KEY_ID=your_turn_key_id
+TURN_TRANSPORT=tcp
 ```
 
 Credentials TURN (username + credential) di-generate **otomatis oleh server** via Cloudflare REST API. Web dan desktop hanya fetch ke endpoint server `/turn-credentials`, sehingga Cloudflare API token tidak pernah masuk bundle client.
 
 > **TURN-only:** WebRTC memakai `iceTransportPolicy: "relay"`. Jika endpoint `/turn-credentials` gagal, video tidak akan connect, termasuk saat host dan viewer berada di jaringan yang sama.
+> **Mobile data:** default server memakai `TURN_TRANSPORT=tcp` agar operator seluler yang memblokir UDP 3478 tetap bisa lewat TURN TCP/TLS.
 
 ### Port Default
 
