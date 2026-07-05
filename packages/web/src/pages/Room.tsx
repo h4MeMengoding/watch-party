@@ -15,8 +15,66 @@ interface Props {
 
 function VideoPlayer({ stream }: { stream: MediaStream | null }) {
   const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
-  return <video ref={ref} className="video-el" autoPlay playsInline />;
+  const [needsGesture, setNeedsGesture] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const play = () => {
+    const video = ref.current;
+    if (!video) return;
+
+    const attempt = video.play();
+    if (attempt !== undefined) {
+      attempt
+        .then(() => {
+          setNeedsGesture(false);
+          setIsPlaying(true);
+        })
+        .catch(() => {
+          setNeedsGesture(true);
+          setIsPlaying(false);
+        });
+    }
+  };
+
+  useEffect(() => {
+    const video = ref.current;
+    setNeedsGesture(false);
+    setIsPlaying(false);
+    if (!video) return;
+
+    video.srcObject = stream;
+    if (stream) requestAnimationFrame(play);
+  }, [stream]);
+
+  return (
+    <>
+      <video
+        ref={ref}
+        className="video-el"
+        autoPlay
+        playsInline
+        onCanPlay={play}
+        onPlaying={() => {
+          setNeedsGesture(false);
+          setIsPlaying(true);
+        }}
+        onWaiting={() => setIsPlaying(false)}
+      />
+
+      {stream && !isPlaying && (
+        <div className="stream-playback">
+          {needsGesture ? (
+            <button className="stream-playback__button" onClick={play}>
+              <IconPlay />
+              Play stream
+            </button>
+          ) : (
+            <div className="stream-playback__status">Connecting stream...</div>
+          )}
+        </div>
+      )}
+    </>
+  );
 }
 
 function formatTime(ts: number) {
@@ -126,6 +184,14 @@ function IconSend({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true">
       <path d="M12 7H2M9 4l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconPlay({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M5 3.5v9l7-4.5-7-4.5z" fill="currentColor" />
     </svg>
   );
 }
